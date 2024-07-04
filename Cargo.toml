@@ -1,0 +1,17 @@
+[package]
+name = "bevy_z_character_controller"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["3d"]
+3d = ["dep:bevy_xpbd_3d"]
+#2d = ["dep:bevy_xpbd_2d"]
+
+[dependencies]
+bevy = {version= "0.13.2", default-features = false}
+bevy_xpbd_3d = {version= "0.4.2", optional = true}
+#bevy_xpbd_2d = {version= "0.4.2", optional = true}
+
+[dev-dependencies]
+bevy = {version= "0.13.2"}
