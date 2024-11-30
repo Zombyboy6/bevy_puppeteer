@@ -3,8 +3,9 @@ pub mod puppeteer;
 use bevy::prelude::*;
 use bevy_xpbd_3d::plugins::{
     collision::Collider,
-    spatial_query::{self, SpatialQuery, SpatialQueryFilter},
+    spatial_query::{SpatialQuery, SpatialQueryFilter},
 };
+use puppeteer::Puppeteer;
 
 const MAX_BOUNCES: u32 = 5;
 
@@ -12,6 +13,7 @@ pub struct ZCharacterControllerPlugin;
 
 impl Plugin for ZCharacterControllerPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
+        app.register_type::<Puppeteer>();
         app.add_systems(
             Update,
             (
@@ -87,6 +89,7 @@ pub(crate) fn check_if_grounded(
     }
 }
 
+#[allow(clippy::complexity)]
 pub fn move_controller(
     time: Res<Time>,
     mut query: Query<(
@@ -101,7 +104,6 @@ pub fn move_controller(
 ) {
     for (entity, controller, input, grounded, collider, mut transform) in query.iter_mut() {
         let gravity = Vec3::new(0.0, input.gravity, 0.0) * time.delta_seconds();
-        println!("{:?}", input.gravity);
 
         let mut effective_translation = collide_and_slide(
             transform.translation,
@@ -110,7 +112,7 @@ pub fn move_controller(
             &SpatialQueryFilter::default().with_excluded_entities([entity]),
             collider,
             controller,
-            &input,
+            input,
             grounded,
             0,
             false,
@@ -122,7 +124,7 @@ pub fn move_controller(
             &SpatialQueryFilter::default().with_excluded_entities([entity]),
             collider,
             controller,
-            &input,
+            input,
             grounded,
             0,
             true,

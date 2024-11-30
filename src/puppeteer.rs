@@ -3,9 +3,9 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy_xpbd_3d::components::GravityScale;
 
-use crate::{Grounded, KinematicPuppet, PuppetInput};
+use crate::{Grounded, PuppetInput};
 
-#[derive(Component)]
+#[derive(Component, Reflect)]
 pub struct Puppeteer {
     pub acceleration: f32,
     pub deceleration: f32,
@@ -53,6 +53,7 @@ impl Default for Puppeteer {
 #[derive(Component, Default, Reflect)]
 pub struct PuppeteerInput {
     pub move_direction: Vec3,
+    pub speed_multiplier: f32,
     jump_start: bool,
     jump_canceled: bool,
 }
@@ -124,7 +125,8 @@ pub fn movement(
             controller.air_turn_speed
         };
 
-        let desiered_velocity = move_action.move_direction * controller.max_speed;
+        let desiered_velocity =
+            move_action.move_direction * controller.max_speed * move_action.speed_multiplier;
 
         let max_speed_change = if move_action.move_direction.length() != 0.0 {
             if move_action.move_direction.dot(puppet.movement_vec) < 0.0 {
@@ -166,6 +168,7 @@ pub fn scale_gravity(mut query: Query<(&Puppeteer, &GravityMultiplier, &mut Grav
     }
 }
 
+#[allow(clippy::complexity)]
 pub fn jumping(
     mut commands: Commands,
     mut query: Query<(
@@ -265,6 +268,7 @@ pub fn jumping(
     }
 }
 
+#[allow(clippy::complexity)]
 pub fn update_coyote_time(
     mut commands: Commands,
     time: Res<Time>,
