@@ -1,17 +1,15 @@
 pub mod puppeteer;
 
+use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
-use bevy_xpbd_3d::plugins::{
-    collision::Collider,
-    spatial_query::{SpatialQuery, SpatialQueryFilter},
-};
+
 use puppeteer::Puppeteer;
 
 const MAX_BOUNCES: u32 = 5;
 
-pub struct ZCharacterControllerPlugin;
+pub struct PuppeteerPlugin;
 
-impl Plugin for ZCharacterControllerPlugin {
+impl Plugin for PuppeteerPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app.register_type::<Puppeteer>();
         app.add_systems(
@@ -74,12 +72,11 @@ pub(crate) fn check_if_grounded(
             collider,
             transform.translation,
             Quat::default(),
-            Direction3d::NEG_Y,
-            controller.skin_thickness * 2.0,
-            true,
-            SpatialQueryFilter::default().with_excluded_entities([entity]),
+            Dir3::NEG_Y,
+            &ShapeCastConfig::from_max_distance(controller.skin_thickness * 2.0),
+            &SpatialQueryFilter::default().with_excluded_entities([entity]),
         ) {
-            if hit.time_of_impact == 0.0 {
+            if hit.distance == 0.0 {
                 transform.translation.y += controller.skin_thickness;
             }
             commands.entity(entity).insert(Grounded);
@@ -103,11 +100,11 @@ pub fn move_controller(
     spatial_query: SpatialQuery,
 ) {
     for (entity, controller, input, grounded, collider, mut transform) in query.iter_mut() {
-        let gravity = Vec3::new(0.0, input.gravity, 0.0) * time.delta_seconds();
+        let gravity = Vec3::new(0.0, input.gravity, 0.0) * time.delta_secs();
 
         let mut effective_translation = collide_and_slide(
             transform.translation,
-            input.movement_vec * Vec3::new(1.0, 0.0, 1.0) * time.delta_seconds(),
+            input.movement_vec * Vec3::new(1.0, 0.0, 1.0) * time.delta_secs(),
             &spatial_query,
             &SpatialQueryFilter::default().with_excluded_entities([entity]),
             collider,
@@ -163,13 +160,12 @@ fn collide_and_slide(
         collider,
         pos,
         Quat::default(),
-        Direction3d::new(vel.normalize_or_zero()).unwrap(),
-        vel.length() + controller.skin_thickness,
-        true,
-        query_filter.to_owned(),
+        Dir3::new(vel.normalize_or_zero()).unwrap(),
+        &ShapeCastConfig::from_max_distance(vel.length() + controller.skin_thickness),
+        query_filter,
     ) {
         let mut effective_vel =
-            vel.normalize_or_zero() * (hit.time_of_impact - controller.skin_thickness);
+            vel.normalize_or_zero() * (hit.distance - controller.skin_thickness);
         let mut remaining_vel = vel - effective_vel;
         let angle = Vec3::Y.angle_between(hit.normal1).to_degrees();
 
@@ -202,25 +198,25 @@ fn collide_and_slide(
                     collider,
                     pos,
                     Quat::default(),
-                    Direction3d::Y,
-                    step_height + controller.skin_thickness,
-                    true,
-                    query_filter.to_owned(),
+                    Dir3::Y,
+                    &ShapeCastConfig::from_max_distance(step_height + controller.skin_thickness),
+                    query_filter,
                 ) {
-                    step_height = step_hit.time_of_impact - controller.skin_thickness;
+                    step_height = step_hit.distance - controller.skin_thickness;
                 }
                 // 2. Cast collision shape along velocity direction
                 if let Some(step_hit) = spatial_query.cast_shape(
                     collider,
                     pos + (Vec3::Y * step_height),
                     Quat::default(),
-                    Direction3d::new(step_vel.normalize_or_zero()).unwrap(),
-                    step_vel.length() + controller.skin_thickness,
-                    true,
-                    query_filter.to_owned(),
+                    Dir3::new(step_vel.normalize_or_zero()).unwrap(),
+                    &ShapeCastConfig::from_max_distance(
+                        step_vel.length() + controller.skin_thickness,
+                    ),
+                    query_filter,
                 ) {
-                    step_vel = vel.normalize_or_zero()
-                        * (step_hit.time_of_impact - controller.skin_thickness);
+                    step_vel =
+                        vel.normalize_or_zero() * (step_hit.distance - controller.skin_thickness);
                 }
                 if step_vel.length() <= controller.skin_thickness {
                     step_vel = Vec3::ZERO;
@@ -230,12 +226,11 @@ fn collide_and_slide(
                     collider,
                     pos + step_vel + (Vec3::Y * step_height),
                     Quat::default(),
-                    Direction3d::NEG_Y,
-                    step_height + controller.skin_thickness,
-                    true,
-                    query_filter.to_owned(),
+                    Dir3::NEG_Y,
+                    &ShapeCastConfig::from_max_distance(step_height + controller.skin_thickness),
+                    query_filter,
                 ) {
-                    step_height -= step_hit.time_of_impact - controller.skin_thickness;
+                    step_height -= step_hit.distance - controller.skin_thickness;
                     let step_angle = Vec3::Y.angle_between(step_hit.normal1).to_degrees();
                     if step_angle <= controller.max_slope_angle {
                         return Vec3::new(step_vel.x, 0.0, step_vel.z) + (Vec3::Y * step_height);

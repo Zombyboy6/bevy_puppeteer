@@ -1,12 +1,12 @@
 [package]
-name = "bevy_z_character_controller"
+name = "puppeteer"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = {version= "0.13.2", features = ["wayland"]}
-bevy-inspector-egui = "0.24.0"
-bevy_xpbd_3d = {version= "0.4.2"}
+bevy = { version = "0.15", features = ["wayland"] }
+bevy-inspector-egui = "0.28.0"
+avian3d = { version = "0.2" }
 
 [dev-dependencies]
-bevy = {version= "0.13.2"}
+bevy = { version = "0.15" }

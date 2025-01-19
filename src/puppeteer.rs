@@ -1,7 +1,7 @@
 use std::time::Duration;
 
+use avian3d::prelude::GravityScale;
 use bevy::prelude::*;
-use bevy_xpbd_3d::components::GravityScale;
 
 use crate::{Grounded, PuppetInput};
 
@@ -64,12 +64,12 @@ impl PuppeteerInput {
         self.move_direction = direction;
     }
 
-    /// Start jumping until chanceld (make sure to call 'stop_jump')  
+    /// Start jumping until chanceld (make sure to call 'stop_jump')
     pub fn start_jump(&mut self) {
         self.jump_start = true;
     }
 
-    /// Stop jumping  
+    /// Stop jumping
     pub fn stop_jump(&mut self) {
         self.jump_canceled = true;
     }
@@ -130,12 +130,12 @@ pub fn movement(
 
         let max_speed_change = if move_action.move_direction.length() != 0.0 {
             if move_action.move_direction.dot(puppet.movement_vec) < 0.0 {
-                turn_speed * time.delta_seconds()
+                turn_speed * time.delta_secs()
             } else {
-                acceleration * time.delta_seconds()
+                acceleration * time.delta_secs()
             }
         } else {
-            deceleration * time.delta_seconds()
+            deceleration * time.delta_secs()
         };
 
         puppet.movement_vec =
@@ -143,7 +143,7 @@ pub fn movement(
 
         // apply gravity
         if !is_grounded {
-            puppet.gravity -= controller.gravity * **gravity_scale * time.delta_seconds();
+            puppet.gravity -= controller.gravity * **gravity_scale * time.delta_secs();
         }
 
         move_action.move_direction = Vec3::ZERO;

@@ -1,3 +1,7 @@
+use avian3d::{
+    prelude::{Collider, ColliderConstructorHierarchy, GravityScale, RigidBody},
+    PhysicsPlugins,
+};
 use bevy::{
     input::mouse::MouseMotion,
     prelude::*,
@@ -7,22 +11,15 @@ use bevy_inspector_egui::{
     bevy_egui::{EguiContext, EguiPlugin},
     egui,
 };
-use bevy_xpbd_3d::{
-    components::{GravityScale, RigidBody},
-    plugins::{
-        collision::{AsyncSceneCollider, Collider, ComputedCollider},
-        PhysicsPlugins,
-    },
-};
-use bevy_z_character_controller::{
+use puppeteer::{
     puppeteer::{GravityMultiplier, Puppeteer, PuppeteerInput},
-    KinematicPuppet, PuppetInput, ZCharacterControllerPlugin,
+    KinematicPuppet, PuppetInput, PuppeteerPlugin,
 };
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(ZCharacterControllerPlugin)
+        .add_plugins(PuppeteerPlugin)
         .add_plugins((
             PhysicsPlugins::default(), /* PhysicsDebugPlugin::default()*/
             EguiPlugin,
@@ -48,15 +45,16 @@ fn setup(
     asset_server: Res<AssetServer>,
     mut windows_query: Query<&mut Window, With<PrimaryWindow>>,
 ) {
-    windows_query.single_mut().cursor.grab_mode = CursorGrabMode::Locked;
-    windows_query.single_mut().cursor.visible = false;
+    windows_query.single_mut().cursor_options.grab_mode = CursorGrabMode::Locked;
+    windows_query.single_mut().cursor_options.visible = false;
     commands.spawn((
-        SceneBundle {
-            scene: asset_server.load("test_level.gltf#Scene0"),
+        SceneRoot(
+            asset_server.load("test_level.gltf#Scene0"),
             //transform: Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::PI * 0.5)),
-            ..default()
-        },
-        AsyncSceneCollider::new(Some(ComputedCollider::TriMesh)),
+        ),
+        ColliderConstructorHierarchy::new(Some(
+            avian3d::prelude::ColliderConstructor::TrimeshFromMesh,
+        )),
         RigidBody::Static,
     ));
 
@@ -85,12 +83,10 @@ fn setup(
         PuppetInput::default(),
         GravityScale::default(),
         GravityMultiplier::default(),
-        Collider::capsule(1.80, 0.25),
+        Collider::capsule(0.25, 1.80),
         RigidBody::Kinematic,
-        SpatialBundle {
-            transform: Transform::from_xyz(0.0, 2.5, 0.0),
-            ..default()
-        },
+        Transform::from_xyz(0.0, 2.5, 0.0),
+        Visibility::default(),
     ));
 
     // Player Head
@@ -99,7 +95,7 @@ fn setup(
             height_offset: 0.9,
             ..default()
         },
-        Camera3dBundle::default(),
+        Camera3d::default(),
     ));
 }
 
@@ -135,12 +131,12 @@ fn mouse_lock(mut query: Query<&mut Window, With<PrimaryWindow>>, keys: Res<Butt
         return;
     };
 
-    if window.cursor.grab_mode != CursorGrabMode::Locked {
-        window.cursor.grab_mode = CursorGrabMode::Locked;
-        window.cursor.visible = false;
+    if window.cursor_options.grab_mode != CursorGrabMode::Locked {
+        window.cursor_options.grab_mode = CursorGrabMode::Locked;
+        window.cursor_options.visible = false;
     } else {
-        window.cursor.grab_mode = CursorGrabMode::None;
-        window.cursor.visible = true;
+        window.cursor_options.grab_mode = CursorGrabMode::None;
+        window.cursor_options.visible = true;
     }
 }
 pub fn player_look(
@@ -180,7 +176,7 @@ pub fn player_move(
     let direction = Vec3::new(horizontal as f32, 0.0, vertical as f32).clamp_length_max(1.0);
 
     let head = player_head_query.single();
-    let (mut input, mut puppeteer) = player_query.single_mut();
+    let (mut input, _puppeteer) = player_query.single_mut();
 
     let local_z = Mat2::from_cols(
         [head.yaw.cos(), -head.yaw.sin()].into(),
