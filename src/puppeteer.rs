@@ -3,9 +3,10 @@ use std::time::Duration;
 use avian3d::prelude::GravityScale;
 use bevy::prelude::*;
 
-use crate::{Grounded, PuppetInput};
+use crate::{Grounded, KinematicPuppet};
 
 #[derive(Component, Reflect)]
+#[require(KinematicPuppet, PuppeteerInput)]
 pub struct Puppeteer {
     pub acceleration: f32,
     pub deceleration: f32,
@@ -30,20 +31,21 @@ pub struct Puppeteer {
 impl Default for Puppeteer {
     fn default() -> Self {
         Self {
-            acceleration: 17.0,
-            deceleration: 17.0,
-            air_acceleration: 17.0,
-            air_deceleration: 3.0,
-            air_turn_speed: 0.1,
+            acceleration: 50.0,
+            deceleration: 50.0,
+            air_acceleration: 10.0,
+            air_deceleration: 10.0,
+            air_turn_speed: f32::INFINITY,
             max_speed: 7.0,
-            turn_speed: 250.0,
-            gravity: 9.81,
+            turn_speed: f32::INFINITY,
+            gravity: -9.81,
             max_slope_angle: Some(55.0_f32.to_radians()),
-            jump_height: 3.0,
-            time_to_jump_apex: 0.5,
-            downward_movement_multiplier: 1.4,
+            jump_height: 1.0,
+            time_to_jump_apex: 0.3,
+            downward_movement_multiplier: 1.0,
             max_air_jumps: 0,
             jump_cutoff: 1.5,
+
             coyote_time: Duration::from_millis(150),
             jump_buffer: Duration::from_millis(150),
         }
@@ -51,6 +53,8 @@ impl Default for Puppeteer {
 }
 
 #[derive(Component, Default, Reflect)]
+#[reflect(Component)]
+//#[require(Puppeteer)]
 pub struct PuppeteerInput {
     pub move_direction: Vec3,
     pub speed_multiplier: f32,
@@ -103,7 +107,7 @@ pub fn movement(
     mut query: Query<(
         &Puppeteer,
         &mut PuppeteerInput,
-        &mut PuppetInput,
+        &mut KinematicPuppet,
         Has<Grounded>,
         &GravityScale,
     )>,
@@ -175,7 +179,7 @@ pub fn jumping(
         Entity,
         &Puppeteer,
         &mut PuppeteerInput,
-        &mut PuppetInput,
+        &mut KinematicPuppet,
         Has<Grounded>,
         Has<Jumping>,
         &mut GravityMultiplier,

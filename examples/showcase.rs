@@ -12,8 +12,8 @@ use bevy_inspector_egui::{
     egui,
 };
 use puppeteer::{
-    puppeteer::{GravityMultiplier, Puppeteer, PuppeteerInput},
-    KinematicPuppet, PuppetInput, PuppeteerPlugin,
+    puppeteer::{Puppeteer, PuppeteerInput},
+    PuppeteerPlugin,
 };
 
 fn main() {
@@ -61,32 +61,10 @@ fn setup(
     // player
     let _player = commands.spawn((
         Player,
-        Puppeteer {
-            acceleration: 50.0,
-            deceleration: 50.0,
-            air_acceleration: 10.0,
-            air_deceleration: 10.0,
-            air_turn_speed: f32::INFINITY,
-            max_speed: 7.0,
-            turn_speed: f32::INFINITY,
-            gravity: -9.81,
-            max_slope_angle: Some(55.0_f32.to_radians()),
-            jump_height: 1.0,
-            time_to_jump_apex: 0.3,
-            downward_movement_multiplier: 1.0,
-            max_air_jumps: 0,
-            jump_cutoff: 1.5,
-            ..default()
-        },
-        PuppeteerInput::default(),
-        KinematicPuppet::default(),
-        PuppetInput::default(),
-        GravityScale::default(),
-        GravityMultiplier::default(),
+        Puppeteer::default(),
         Collider::capsule(0.25, 1.80),
         RigidBody::Kinematic,
         Transform::from_xyz(0.0, 2.5, 0.0),
-        Visibility::default(),
     ));
 
     // Player Head

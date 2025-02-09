@@ -1,9 +1,11 @@
 pub mod puppeteer;
 
-use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilter};
+use avian3d::prelude::{
+    Collider, GravityScale, RigidBody, ShapeCastConfig, SpatialQuery, SpatialQueryFilter,
+};
 use bevy::prelude::*;
 
-use puppeteer::Puppeteer;
+use puppeteer::{GravityMultiplier, Puppeteer, PuppeteerInput};
 
 const MAX_BOUNCES: u32 = 5;
 
@@ -11,7 +13,9 @@ pub struct PuppeteerPlugin;
 
 impl Plugin for PuppeteerPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
-        app.register_type::<Puppeteer>();
+        app.register_type::<Puppeteer>()
+            .register_type::<KinematicPuppet>()
+            .register_type::<PuppeteerInput>();
         app.add_systems(
             Update,
             (
@@ -28,27 +32,33 @@ impl Plugin for PuppeteerPlugin {
     }
 }
 
-#[derive(Debug, Component, Default)]
-pub struct PuppetInput {
-    movement_vec: Vec3,
-    pub gravity: f32,
-}
-
-impl PuppetInput {
-    pub fn move_to(&mut self, vec: Vec3) {
-        self.movement_vec = vec;
-    }
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Copy, Component)]
 pub struct Grounded;
 
-#[derive(Debug, Component)]
+#[derive(Debug, Component, Reflect)]
+#[reflect(Component)]
+#[require(
+    Collider,
+    RigidBody,
+    Transform,
+    Visibility,
+    GravityScale,
+    GravityMultiplier
+)]
 pub struct KinematicPuppet {
     pub skin_thickness: f32,
     pub step_move_distance: f32,
     pub step_height: f32,
     pub max_slope_angle: f32,
+
+    pub gravity: f32,
+    movement_vec: Vec3,
+}
+
+impl KinematicPuppet {
+    fn move_to(&mut self, target: Vec3) {
+        self.movement_vec = target;
+    }
 }
 
 impl Default for KinematicPuppet {
@@ -58,6 +68,8 @@ impl Default for KinematicPuppet {
             step_move_distance: 0.2,
             step_height: 0.5,
             max_slope_angle: 55.0,
+            gravity: 0.0,
+            movement_vec: Vec3::default(),
         }
     }
 }
@@ -92,24 +104,22 @@ pub fn move_controller(
     mut query: Query<(
         Entity,
         &KinematicPuppet,
-        &PuppetInput,
         Has<Grounded>,
         &Collider,
         &mut Transform,
     )>,
     spatial_query: SpatialQuery,
 ) {
-    for (entity, controller, input, grounded, collider, mut transform) in query.iter_mut() {
-        let gravity = Vec3::new(0.0, input.gravity, 0.0) * time.delta_secs();
+    for (entity, puppet, grounded, collider, mut transform) in query.iter_mut() {
+        let gravity = Vec3::new(0.0, puppet.gravity, 0.0) * time.delta_secs();
 
         let mut effective_translation = collide_and_slide(
             transform.translation,
-            input.movement_vec * Vec3::new(1.0, 0.0, 1.0) * time.delta_secs(),
+            puppet.movement_vec * Vec3::new(1.0, 0.0, 1.0) * time.delta_secs(),
             &spatial_query,
             &SpatialQueryFilter::default().with_excluded_entities([entity]),
             collider,
-            controller,
-            input,
+            puppet,
             grounded,
             0,
             false,
@@ -120,8 +130,7 @@ pub fn move_controller(
             &spatial_query,
             &SpatialQueryFilter::default().with_excluded_entities([entity]),
             collider,
-            controller,
-            input,
+            puppet,
             grounded,
             0,
             true,
@@ -138,8 +147,7 @@ fn collide_and_slide(
     spatial_query: &SpatialQuery,
     query_filter: &SpatialQueryFilter,
     collider: &Collider,
-    controller: &KinematicPuppet,
-    initial_input: &PuppetInput,
+    puppet: &KinematicPuppet,
     grounded: bool,
     depth: u32,
     gravity_pass: bool,
@@ -151,9 +159,9 @@ fn collide_and_slide(
         return Vec3::ZERO;
     }
 
-    let mut initial_vel = initial_input.movement_vec;
+    let mut initial_vel = puppet.movement_vec;
     if gravity_pass {
-        initial_vel = Vec3::new(0.0, initial_input.gravity, 0.0);
+        initial_vel = Vec3::new(0.0, puppet.gravity, 0.0);
     }
 
     if let Some(hit) = spatial_query.cast_shape(
@@ -161,20 +169,19 @@ fn collide_and_slide(
         pos,
         Quat::default(),
         Dir3::new(vel.normalize_or_zero()).unwrap(),
-        &ShapeCastConfig::from_max_distance(vel.length() + controller.skin_thickness),
+        &ShapeCastConfig::from_max_distance(vel.length() + puppet.skin_thickness),
         query_filter,
     ) {
-        let mut effective_vel =
-            vel.normalize_or_zero() * (hit.distance - controller.skin_thickness);
+        let mut effective_vel = vel.normalize_or_zero() * (hit.distance - puppet.skin_thickness);
         let mut remaining_vel = vel - effective_vel;
         let angle = Vec3::Y.angle_between(hit.normal1).to_degrees();
 
-        if effective_vel.length() <= controller.skin_thickness {
+        if effective_vel.length() <= puppet.skin_thickness {
             effective_vel = Vec3::ZERO;
         }
 
         // Check for max slope
-        if angle <= controller.max_slope_angle {
+        if angle <= puppet.max_slope_angle {
             if gravity_pass {
                 return effective_vel;
             }
@@ -190,8 +197,8 @@ fn collide_and_slide(
 
             if grounded && !gravity_pass {
                 //Check step
-                let mut step_height = controller.step_height;
-                let mut step_vel = vel + (-hit.normal1 * controller.step_move_distance);
+                let mut step_height = puppet.step_height;
+                let mut step_vel = vel + (-hit.normal1 * puppet.step_move_distance);
 
                 // 1. Cast collision shape up a step-height
                 if let Some(step_hit) = spatial_query.cast_shape(
@@ -199,10 +206,10 @@ fn collide_and_slide(
                     pos,
                     Quat::default(),
                     Dir3::Y,
-                    &ShapeCastConfig::from_max_distance(step_height + controller.skin_thickness),
+                    &ShapeCastConfig::from_max_distance(step_height + puppet.skin_thickness),
                     query_filter,
                 ) {
-                    step_height = step_hit.distance - controller.skin_thickness;
+                    step_height = step_hit.distance - puppet.skin_thickness;
                 }
                 // 2. Cast collision shape along velocity direction
                 if let Some(step_hit) = spatial_query.cast_shape(
@@ -210,15 +217,13 @@ fn collide_and_slide(
                     pos + (Vec3::Y * step_height),
                     Quat::default(),
                     Dir3::new(step_vel.normalize_or_zero()).unwrap(),
-                    &ShapeCastConfig::from_max_distance(
-                        step_vel.length() + controller.skin_thickness,
-                    ),
+                    &ShapeCastConfig::from_max_distance(step_vel.length() + puppet.skin_thickness),
                     query_filter,
                 ) {
                     step_vel =
-                        vel.normalize_or_zero() * (step_hit.distance - controller.skin_thickness);
+                        vel.normalize_or_zero() * (step_hit.distance - puppet.skin_thickness);
                 }
-                if step_vel.length() <= controller.skin_thickness {
+                if step_vel.length() <= puppet.skin_thickness {
                     step_vel = Vec3::ZERO;
                 }
                 // 3. Cast collision shape down new vel.y - pos.y
@@ -227,12 +232,12 @@ fn collide_and_slide(
                     pos + step_vel + (Vec3::Y * step_height),
                     Quat::default(),
                     Dir3::NEG_Y,
-                    &ShapeCastConfig::from_max_distance(step_height + controller.skin_thickness),
+                    &ShapeCastConfig::from_max_distance(step_height + puppet.skin_thickness),
                     query_filter,
                 ) {
-                    step_height -= step_hit.distance - controller.skin_thickness;
+                    step_height -= step_hit.distance - puppet.skin_thickness;
                     let step_angle = Vec3::Y.angle_between(step_hit.normal1).to_degrees();
-                    if step_angle <= controller.max_slope_angle {
+                    if step_angle <= puppet.max_slope_angle {
                         return Vec3::new(step_vel.x, 0.0, step_vel.z) + (Vec3::Y * step_height);
                     }
                 }
@@ -254,8 +259,7 @@ fn collide_and_slide(
                 spatial_query,
                 query_filter,
                 collider,
-                controller,
-                initial_input,
+                puppet,
                 grounded,
                 depth + 1,
                 gravity_pass,
