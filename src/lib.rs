@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub mod puppeteer;
 
 use avian3d::prelude::{

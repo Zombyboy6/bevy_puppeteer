@@ -1,5 +1,5 @@
 use avian3d::{
-    prelude::{Collider, ColliderConstructorHierarchy, GravityScale, RigidBody},
+    prelude::{Collider, ColliderConstructorHierarchy, RigidBody},
     PhysicsPlugins,
 };
 use bevy::{
