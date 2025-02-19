@@ -2,7 +2,7 @@
 pub mod puppeteer;
 
 use avian3d::prelude::{
-    Collider, GravityScale, RigidBody, ShapeCastConfig, SpatialQuery, SpatialQueryFilter,
+    Collider, GravityScale, Position, RigidBody, ShapeCastConfig, SpatialQuery, SpatialQueryFilter,
 };
 use bevy::prelude::*;
 
@@ -18,7 +18,7 @@ impl Plugin for PuppeteerPlugin {
             .register_type::<KinematicPuppet>()
             .register_type::<PuppeteerInput>();
         app.add_systems(
-            Update,
+            FixedUpdate,
             (
                 check_if_grounded,
                 puppeteer::movement,
@@ -53,12 +53,12 @@ pub struct KinematicPuppet {
     pub max_slope_angle: f32,
 
     pub gravity: f32,
-    movement_vec: Vec3,
+    movement_vel: Vec3,
 }
 
 impl KinematicPuppet {
     fn move_to(&mut self, target: Vec3) {
-        self.movement_vec = target;
+        self.movement_vel = target;
     }
 }
 
@@ -70,7 +70,7 @@ impl Default for KinematicPuppet {
             step_height: 0.5,
             max_slope_angle: 55.0,
             gravity: 0.0,
-            movement_vec: Vec3::default(),
+            movement_vel: Vec3::default(),
         }
     }
 }
@@ -116,7 +116,7 @@ pub fn move_controller(
 
         let mut effective_translation = collide_and_slide(
             transform.translation,
-            puppet.movement_vec * Vec3::new(1.0, 0.0, 1.0) * time.delta_secs(),
+            puppet.movement_vel * Vec3::new(1.0, 0.0, 1.0) * time.delta_secs(),
             &spatial_query,
             &SpatialQueryFilter::default().with_excluded_entities([entity]),
             collider,
@@ -160,7 +160,7 @@ fn collide_and_slide(
         return Vec3::ZERO;
     }
 
-    let mut initial_vel = puppet.movement_vec;
+    let mut initial_vel = puppet.movement_vel;
     if gravity_pass {
         initial_vel = Vec3::new(0.0, puppet.gravity, 0.0);
     }
@@ -169,7 +169,7 @@ fn collide_and_slide(
         collider,
         pos,
         Quat::default(),
-        Dir3::new(vel.normalize_or_zero()).unwrap(),
+        Dir3::new(vel.normalize()).unwrap(),
         &ShapeCastConfig::from_max_distance(vel.length() + puppet.skin_thickness),
         query_filter,
     ) {
@@ -286,4 +286,92 @@ fn project_onto_plane(rhs: Vec3, plane: Vec3) -> Vec3 {
 
 fn project_and_scale(rhs: Vec3, plane: Vec3) -> Vec3 {
     project_onto_plane(rhs, plane).normalize_or_zero() * rhs.length()
+}
+
+#[cfg(test)]
+mod test {
+    use avian3d::{
+        prelude::{Collider, ColliderHierarchyPlugin, Position, RigidBody},
+        PhysicsPlugins,
+    };
+    use bevy::prelude::*;
+
+    use crate::{
+        puppeteer::{Puppeteer, PuppeteerInput},
+        PuppeteerPlugin,
+    };
+
+    #[test]
+    fn delta_sync() {
+        let mut app = build_app();
+
+        test_env(app.world_mut());
+        let puppet_id = app
+            .world_mut()
+            .spawn((
+                Puppeteer::default(),
+                Collider::capsule(0.25, 1.20),
+                RigidBody::Kinematic,
+                Transform::from_xyz(0.0, 4.0, 0.0),
+            ))
+            .id();
+        app.update();
+
+        for _ in 0..5000 {
+            app.update();
+        }
+
+        let pos1 = app.world().get::<Position>(puppet_id).cloned();
+
+        let mut app = build_app();
+
+        app.insert_resource(Time::<Fixed>::from_hz(128.0));
+
+        test_env(app.world_mut());
+        let puppet_id = app
+            .world_mut()
+            .spawn((
+                Puppeteer::default(),
+                Collider::capsule(0.25, 1.20),
+                RigidBody::Kinematic,
+                Transform::from_xyz(0.0, 4.0, 0.0),
+            ))
+            .id();
+
+        app.update();
+        for _ in 0..5000 {
+            app.update();
+        }
+
+        let pos2 = app.world().get::<Position>(puppet_id).cloned();
+
+        assert_eq!(pos1, pos2);
+    }
+
+    fn test_env(world: &mut World) {
+        world.spawn((Collider::cuboid(5.0, 0.1, 5.0), RigidBody::Static));
+    }
+
+    fn move_puppet(mut query: Query<&mut PuppeteerInput>) {
+        let mut puppet = query.single_mut();
+        puppet.move_amount(Vec3::X);
+    }
+
+    fn build_app() -> App {
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            TransformPlugin,
+            bevy::asset::AssetPlugin::default(),
+            bevy::scene::ScenePlugin::default(),
+        ))
+        .add_plugins(PuppeteerPlugin)
+        .add_plugins((PhysicsPlugins::default()
+            .build()
+            .disable::<ColliderHierarchyPlugin>(),))
+        .add_systems(FixedUpdate, move_puppet)
+        .init_resource::<Assets<Mesh>>();
+        app.finish();
+        app
+    }
 }

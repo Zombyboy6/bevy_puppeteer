@@ -35,9 +35,9 @@ impl Default for Puppeteer {
             deceleration: 50.0,
             air_acceleration: 10.0,
             air_deceleration: 10.0,
-            air_turn_speed: f32::INFINITY,
+            air_turn_speed: 1000.0,
             max_speed: 7.0,
-            turn_speed: f32::INFINITY,
+            turn_speed: 1000.0,
             gravity: -9.81,
             max_slope_angle: Some(55.0_f32.to_radians()),
             jump_height: 1.0,
@@ -132,18 +132,31 @@ pub fn movement(
         let desiered_velocity =
             move_action.move_direction * controller.max_speed * move_action.speed_multiplier;
 
-        let max_speed_change = if move_action.move_direction.length() != 0.0 {
-            if move_action.move_direction.dot(puppet.movement_vec) < 0.0 {
-                turn_speed * time.delta_secs()
+        let max_speed_change = if move_action.move_direction.length() > 0.1 {
+            if puppet.movement_vel.length() < 0.1 {
+                acceleration
             } else {
-                acceleration * time.delta_secs()
+                acceleration.lerp(
+                    turn_speed,
+                    1.0 - ((move_action
+                        .move_direction
+                        .normalize()
+                        .dot(puppet.movement_vel.normalize())
+                        .clamp(-1.0, 1.0)
+                        + 1.0)
+                        * 0.5)
+                        .clamp(0.0, 1.0),
+                )
             }
         } else {
-            deceleration * time.delta_secs()
+            deceleration
         };
 
-        puppet.movement_vec =
-            move_towards(puppet.movement_vec, desiered_velocity, max_speed_change);
+        puppet.movement_vel = move_towards(
+            puppet.movement_vel,
+            desiered_velocity,
+            max_speed_change * time.delta_secs(),
+        );
 
         // apply gravity
         if !is_grounded {
@@ -258,7 +271,7 @@ pub fn jumping(
             puppet_input.gravity += jump_speed;
         }
 
-        if puppet_input.movement_vec.y > 0.01 {
+        if puppet_input.movement_vel.y > 0.01 {
             if is_jumping {
                 gravity_multiplier.0 = 1.0;
             } else {
