@@ -1,19 +1,21 @@
 use avian3d::{
-    prelude::{Collider, ColliderConstructorHierarchy, RigidBody},
     PhysicsPlugins,
+    prelude::{Collider, ColliderConstructorHierarchy, RigidBody},
 };
 use bevy::{
-    input::mouse::MouseMotion,
+    input::{ButtonState, keyboard::KeyboardInput, mouse::MouseMotion},
     prelude::*,
     window::{CursorGrabMode, PrimaryWindow},
 };
 use bevy_inspector_egui::{
+    DefaultInspectorConfigPlugin,
     bevy_egui::{EguiContext, EguiPlugin},
     egui,
+    quick::WorldInspectorPlugin,
 };
 use puppeteer::{
-    puppeteer::{Puppeteer, PuppeteerInput},
     PuppeteerPlugin,
+    puppeteer::{Puppeteer, PuppeteerInput},
 };
 
 fn main() {
@@ -22,11 +24,15 @@ fn main() {
         .add_plugins(PuppeteerPlugin)
         .add_plugins((
             PhysicsPlugins::default(), /* PhysicsDebugPlugin::default()*/
-            EguiPlugin,
-            bevy_inspector_egui::DefaultInspectorConfigPlugin,
+            DefaultInspectorConfigPlugin,
+            EguiPlugin {
+                enable_multipass_for_primary_context: false,
+            },
+            //WorldInspectorPlugin::default(),
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, (player_look, player_move, ui, mouse_lock))
+        .add_systems(Update, (player_look, ui, mouse_lock))
+        .add_systems(FixedUpdate, player_move)
         .run();
 }
 
@@ -44,9 +50,9 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut windows_query: Query<&mut Window, With<PrimaryWindow>>,
-) {
-    windows_query.single_mut().cursor_options.grab_mode = CursorGrabMode::Locked;
-    windows_query.single_mut().cursor_options.visible = false;
+) -> Result {
+    windows_query.single_mut()?.cursor_options.grab_mode = CursorGrabMode::Locked;
+    windows_query.single_mut()?.cursor_options.visible = false;
     commands.spawn((
         SceneRoot(
             asset_server.load("test_level.gltf#Scene0"),
@@ -75,12 +81,13 @@ fn setup(
         },
         Camera3d::default(),
     ));
+    Ok(())
 }
 
 fn ui(world: &mut World) {
     let Ok(egui_context) = world
         .query_filtered::<&mut EguiContext, With<PrimaryWindow>>()
-        .get_single(world)
+        .single(world)
     else {
         return;
     };
@@ -91,7 +98,7 @@ fn ui(world: &mut World) {
         egui::ScrollArea::vertical().show(ui, |ui| {
             let Ok(puppeteer) = world
                 .query_filtered::<Entity, With<Puppeteer>>()
-                .get_single(world)
+                .single(world)
             else {
                 return;
             };
@@ -105,7 +112,7 @@ fn mouse_lock(mut query: Query<&mut Window, With<PrimaryWindow>>, keys: Res<Butt
     if !keys.just_pressed(KeyCode::Escape) {
         return;
     }
-    let Ok(mut window) = query.get_single_mut() else {
+    let Ok(mut window) = query.single_mut() else {
         return;
     };
 
@@ -121,7 +128,7 @@ pub fn player_look(
     mut player_head_query: Query<(&mut PlayerHead, &mut Transform), Without<Player>>,
     player_query: Query<&Transform, With<Player>>,
     mut mouse_motion_event: EventReader<MouseMotion>,
-) {
+) -> Result {
     let sensibility = 0.75;
     for (mut head, mut head_transform) in player_head_query.iter_mut() {
         for mouse in mouse_motion_event.read() {
@@ -135,15 +142,26 @@ pub fn player_look(
             head_transform.rotation = new_rotation_y * new_rotation_x;
         }
         head_transform.translation =
-            player_query.single().translation + (Vec3::Y * head.height_offset);
+            player_query.single()?.translation + (Vec3::Y * head.height_offset);
     }
+    Ok(())
 }
 
 pub fn player_move(
     player_head_query: Query<&PlayerHead>,
     mut player_query: Query<(&mut PuppeteerInput, &mut Puppeteer)>,
-    keyboard_input: Res<ButtonInput<KeyCode>>,
-) {
+    mut keyboard_input: Local<ButtonInput<KeyCode>>,
+    mut keyboard_input_events: EventReader<KeyboardInput>,
+) -> Result {
+    keyboard_input.clear();
+    for event in keyboard_input_events.read() {
+        let key_code = event.key_code;
+        match event.state {
+            ButtonState::Pressed => keyboard_input.press(key_code),
+            ButtonState::Released => keyboard_input.release(key_code),
+        }
+    }
+
     let up = keyboard_input.any_pressed([KeyCode::KeyW, KeyCode::ArrowUp]);
     let down = keyboard_input.any_pressed([KeyCode::KeyS, KeyCode::ArrowDown]);
     let left = keyboard_input.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]);
@@ -153,8 +171,8 @@ pub fn player_move(
     let vertical = up as i8 - down as i8;
     let direction = Vec3::new(horizontal as f32, 0.0, vertical as f32).clamp_length_max(1.0);
 
-    let head = player_head_query.single();
-    let (mut input, _puppeteer) = player_query.single_mut();
+    let head = player_head_query.single()?;
+    let (mut input, _puppeteer) = player_query.single_mut()?;
 
     let local_z = Mat2::from_cols(
         [head.yaw.cos(), -head.yaw.sin()].into(),
@@ -183,4 +201,5 @@ pub fn player_move(
 
     input.move_amount(move_vector);
     //println!("{:?}", move_vector);
+    Ok(())
 }
