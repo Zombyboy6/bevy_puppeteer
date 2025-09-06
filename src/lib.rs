@@ -2,14 +2,11 @@
 pub mod puppet;
 pub mod puppeteer;
 
-use avian3d::prelude::{
-    Collider, GravityScale, PhysicsSet, Position, RigidBody, ShapeCastConfig, SpatialQuery,
-    SpatialQueryFilter,
-};
+use avian3d::prelude::PhysicsSet;
 use bevy::prelude::*;
 
 use puppet::PuppetPlugin;
-use puppeteer::{GravityMultiplier, Jumping, Puppeteer, PuppeteerInput};
+use puppeteer::{Jumping, Puppeteer, PuppeteerInput};
 
 const MAX_BOUNCES: u32 = 5;
 
@@ -40,7 +37,6 @@ impl Plugin for PuppeteerPlugin {
                 puppeteer::update_coyote_time,
                 puppeteer::update_jump_buffer,
                 puppeteer::jumping,
-                puppeteer::update_jump,
             )
                 .chain()
                 .in_set(PuppeteerSet::Compute),

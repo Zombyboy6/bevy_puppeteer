@@ -1,11 +1,7 @@
 use avian3d::prelude::{
     Collider, GravityScale, RigidBody, ShapeCastConfig, SpatialQuery, SpatialQueryFilter,
 };
-use bevy::{
-    log,
-    math::{VectorSpace, ops::log10},
-    prelude::*,
-};
+use bevy::prelude::*;
 
 use crate::{MAX_BOUNCES, PuppeteerSet, puppeteer::GravityMultiplier};
 
@@ -57,6 +53,10 @@ pub struct Puppet {
     /// This is reset to zero when the puppet has moved.
     /// Use [Puppet::move_to] to update the target position.
     pub target_position: Vec3,
+
+    /// The current gravity velocity.
+    /// This doesn't get reset and is used internally to calculate the jump falloff.
+    pub gravity_velocity: f32,
 }
 
 impl Puppet {
@@ -75,6 +75,7 @@ impl Default for Puppet {
             step_height: 0.5,
             max_slope_angle: 55.0,
             target_position: Vec3::ZERO,
+            gravity_velocity: 0.0,
         }
     }
 }
@@ -122,7 +123,7 @@ pub fn move_puppet(
     spatial_query: SpatialQuery,
 ) {
     for (entity, puppet, grounded, collider, mut transform) in query.iter_mut() {
-        let gravity = Vec3::new(0.0, puppet.target_position.y, 0.0);
+        let gravity = Vec3::new(0.0, puppet.gravity_velocity, 0.0);
 
         let mut effective_translation = collide_and_slide(
             transform.translation,
@@ -172,7 +173,7 @@ fn collide_and_slide(
 
     let mut initial_vel = puppet.target_position;
     if gravity_pass {
-        initial_vel = Vec3::new(0.0, puppet.target_position.y, 0.0);
+        initial_vel = Vec3::new(0.0, puppet.gravity_velocity, 0.0);
     }
 
     if let Some(hit) = spatial_query.cast_shape(

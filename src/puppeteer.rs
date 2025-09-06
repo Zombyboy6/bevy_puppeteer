@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use avian3d::prelude::GravityScale;
-use bevy::{math::FloatPow, prelude::*};
+use bevy::prelude::*;
 
 use crate::puppet::{Grounded, Puppet};
 
@@ -37,7 +37,7 @@ impl Default for Puppeteer {
             air_turn_speed: 1000.0,
             max_speed: 7.0,
             turn_speed: 1000.0,
-            gravity: -9.81,
+            gravity: 9.81,
             jump_height: 1.0,
             time_to_jump_apex: 0.3,
             downward_movement_multiplier: 1.0,
@@ -81,7 +81,7 @@ impl PuppeteerInput {
 #[derive(Component, Reflect)]
 #[reflect(Component)]
 #[component(storage = "SparseSet")]
-pub struct Jumping(f32);
+pub struct Jumping;
 
 #[derive(Component)]
 #[component(storage = "SparseSet")]
@@ -110,6 +110,7 @@ pub fn movement(
         Has<Grounded>,
         &GravityScale,
     )>,
+    time: Res<Time>,
 ) {
     for (controller, mut move_action, mut puppet, is_grounded, gravity_scale) in &mut query {
         let acceleration = if is_grounded {
@@ -156,7 +157,7 @@ pub fn movement(
 
         // apply gravity
         if !is_grounded {
-            puppet.target_position -= Vec3::new(0.0, -controller.gravity, 0.0);
+            puppet.gravity_velocity -= controller.gravity * **gravity_scale * time.delta_secs();
         }
 
         move_action.move_direction = Vec3::ZERO;
@@ -169,34 +170,15 @@ fn move_towards(current: Vec3, target: Vec3, max_distance_delta: f32) -> Vec3 {
     current + (target - current).normalize_or_zero() * max_distance_delta
 }
 
-pub fn scale_gravity(
-    mut query: Query<(
-        &Puppeteer,
-        &GravityMultiplier,
-        &mut GravityScale,
-        Has<Jumping>,
-    )>,
-) {
-    for (puppeteer, gravity_multiplier, mut gravity_scale, is_jumping) in &mut query {
-        let new_gravity = (-2.0 * puppeteer.jump_height)
-            / (puppeteer.time_to_jump_apex * puppeteer.time_to_jump_apex);
+pub fn scale_gravity(mut query: Query<(&Puppeteer, &GravityMultiplier, &mut GravityScale)>) {
+    for (puppeteer, gravity_multiplier, mut gravity_scale) in &mut query {
+        let new_gravity = Vec2::new(
+            0.0,
+            (-2.0 * puppeteer.jump_height)
+                / (puppeteer.time_to_jump_apex * puppeteer.time_to_jump_apex),
+        );
 
-        **gravity_scale = (new_gravity / -puppeteer.gravity) * **gravity_multiplier;
-    }
-}
-
-pub fn update_jump(mut query: Query<(&mut Jumping, &Puppeteer, &mut Puppet)>, time: Res<Time>) {
-    for (mut jumping, puppeteer, mut input) in &mut query {
-        let t = jumping.0 - puppeteer.time_to_jump_apex;
-        if t <= 0.0 {
-            input.target_position.y =
-                (puppeteer.jump_height + -puppeteer.time_to_jump_apex * t.powi(3));
-        } else {
-            input.target_position.y =
-                puppeteer.gravity + (puppeteer.downward_movement_multiplier * t.powi(3));
-        }
-
-        jumping.0 += time.delta_secs();
+        **gravity_scale = (new_gravity.y / -puppeteer.gravity) * **gravity_multiplier;
     }
 }
 
@@ -231,26 +213,12 @@ pub fn jumping(
         has_jump_buffer,
     ) in &mut query
     {
-        /*
-        if puppet_input.target_position.y > 0.01 {
-            if is_jumping {
-                gravity_multiplier.0 = 1.0;
-            } else {
-                gravity_multiplier.0 = puppeteer.jump_cutoff;
-            }
-        } else if puppet_input.target_position.y < -0.01 {
-            gravity_multiplier.0 = puppeteer.downward_movement_multiplier;
-        } else {
-            gravity_multiplier.0 = 1.0;
-        }
-        */
-
         if input.jump_canceled {
             commands.entity(entity).remove::<Jumping>();
             input.jump_canceled = false;
         }
         if input.jump_start {
-            commands.entity(entity).insert_if_new(Jumping(0.0));
+            commands.entity(entity).insert(Jumping);
 
             if is_grounded || coyote_time.is_some_and(|t| !t.finished()) {
                 commands.entity(entity).insert(JumpBuffer(Timer::new(
@@ -291,11 +259,25 @@ pub fn jumping(
             let mut jump_speed =
                 (-2.0 * -puppeteer.gravity * **gravity_scale * puppeteer.jump_height).sqrt();
 
-            if puppet_input.target_position.y > 0.0 {
-                jump_speed = (jump_speed - puppet_input.target_position.y).max(0.0);
-            } else if puppet_input.target_position.y < 0.0 {
-                jump_speed += puppet_input.target_position.y.abs();
+            if puppet_input.gravity_velocity > 0.0 {
+                jump_speed = (jump_speed - puppet_input.gravity_velocity).max(0.0);
+            } else if puppet_input.gravity_velocity < 0.0 {
+                jump_speed += puppet_input.gravity_velocity.abs();
             }
+
+            puppet_input.gravity_velocity += jump_speed;
+        }
+
+        if puppet_input.target_position.y > 0.01 {
+            if is_jumping {
+                gravity_multiplier.0 = 1.0;
+            } else {
+                gravity_multiplier.0 = puppeteer.jump_cutoff;
+            }
+        } else if puppet_input.gravity_velocity < -0.01 {
+            gravity_multiplier.0 = puppeteer.downward_movement_multiplier;
+        } else {
+            gravity_multiplier.0 = 1.0;
         }
     }
 }

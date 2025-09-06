@@ -11,7 +11,6 @@ use bevy_inspector_egui::{
     DefaultInspectorConfigPlugin,
     bevy_egui::{EguiContext, EguiPlugin},
     egui,
-    quick::WorldInspectorPlugin,
 };
 use puppeteer::{
     PuppeteerPlugin,
@@ -70,7 +69,7 @@ fn setup(
         Puppeteer::default(),
         Collider::capsule(0.25, 1.80),
         RigidBody::Kinematic,
-        Transform::from_xyz(0.0, 2.5, 0.0),
+        Transform::from_xyz(0.0, 200.5, 0.0),
     ));
 
     // Player Head
