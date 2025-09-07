@@ -30,13 +30,13 @@ pub struct Puppeteer {
 impl Default for Puppeteer {
     fn default() -> Self {
         Self {
-            acceleration: 50.0,
-            deceleration: 50.0,
-            air_acceleration: 10.0,
-            air_deceleration: 10.0,
-            air_turn_speed: 1000.0,
+            acceleration: 0.7,
+            deceleration: 0.7,
+            air_acceleration: 0.6,
+            air_deceleration: 0.1,
+            air_turn_speed: 0.1,
             max_speed: 7.0,
-            turn_speed: 1000.0,
+            turn_speed: 2.0,
             gravity: 9.81,
             jump_height: 1.0,
             time_to_jump_apex: 0.3,
@@ -138,14 +138,12 @@ pub fn movement(
             } else {
                 acceleration.lerp(
                     turn_speed,
-                    1.0 - ((move_action
+                    (-move_action
                         .move_direction
                         .normalize()
                         .dot(puppet.target_position.normalize())
-                        .clamp(-1.0, 1.0)
                         + 1.0)
-                        * 0.5)
-                        .clamp(0.0, 1.0),
+                        * 0.5,
                 )
             }
         } else {

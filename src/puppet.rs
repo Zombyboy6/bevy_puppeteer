@@ -50,7 +50,7 @@ pub struct Puppet {
     pub max_slope_angle: f32,
 
     /// The relative position the puppet tries to move to in the next iteration.
-    /// This is reset to zero when the puppet has moved.
+    /// This does not get reset.
     /// Use [Puppet::move_to] to update the target position.
     pub target_position: Vec3,
 

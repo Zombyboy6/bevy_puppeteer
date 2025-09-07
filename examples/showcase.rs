@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use avian3d::{
     PhysicsPlugins,
     prelude::{Collider, ColliderConstructorHierarchy, RigidBody},
@@ -11,6 +13,7 @@ use bevy_inspector_egui::{
     DefaultInspectorConfigPlugin,
     bevy_egui::{EguiContext, EguiPlugin},
     egui,
+    restricted_world_view::RestrictedWorldView,
 };
 use puppeteer::{
     PuppeteerPlugin,
@@ -69,7 +72,7 @@ fn setup(
         Puppeteer::default(),
         Collider::capsule(0.25, 1.80),
         RigidBody::Kinematic,
-        Transform::from_xyz(0.0, 200.5, 0.0),
+        Transform::from_xyz(0.0, 5.5, 0.0),
     ));
 
     // Player Head
@@ -95,14 +98,28 @@ fn ui(world: &mut World) {
 
     egui::Window::new("UI").show(egui_context.get_mut(), |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
-            let Ok(puppeteer) = world
-                .query_filtered::<Entity, With<Puppeteer>>()
-                .single(world)
+            let Ok((entity, puppeteer)) = &world.query::<(Entity, &Puppeteer)>().single(world)
             else {
                 return;
             };
+            let type_id = puppeteer.to_owned().type_id();
 
-            bevy_inspector_egui::bevy_inspector::ui_for_entity(world, puppeteer, ui);
+            let type_registry = world.resource::<AppTypeRegistry>().0.clone();
+            let type_registry = type_registry.read();
+            let mut world = RestrictedWorldView::from(world);
+            let (mut component_world, world) = world.split_off_component((*entity, type_id));
+
+            let mut puppeteer = component_world
+                .get_entity_component_reflect(*entity, type_id, &type_registry)
+                .unwrap();
+
+            unsafe {
+                bevy_inspector_egui::bevy_inspector::ui_for_value(
+                    &mut *puppeteer,
+                    ui,
+                    world.world().world_mut(),
+                );
+            }
         });
     });
 }
@@ -127,10 +144,14 @@ pub fn player_look(
     mut player_head_query: Query<(&mut PlayerHead, &mut Transform), Without<Player>>,
     player_query: Query<&Transform, With<Player>>,
     mut mouse_motion_event: EventReader<MouseMotion>,
+    window: Single<&Window, With<PrimaryWindow>>,
 ) -> Result {
     let sensibility = 0.75;
     for (mut head, mut head_transform) in player_head_query.iter_mut() {
         for mouse in mouse_motion_event.read() {
+            if window.cursor_options.grab_mode == CursorGrabMode::None {
+                continue;
+            }
             head.pitch -= (0.1 * mouse.delta.y * sensibility).to_radians();
             head.yaw -= (0.1 * mouse.delta.x * sensibility).to_radians();
 
