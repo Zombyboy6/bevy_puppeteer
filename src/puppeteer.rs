@@ -170,13 +170,10 @@ fn move_towards(current: Vec3, target: Vec3, max_distance_delta: f32) -> Vec3 {
 
 pub fn scale_gravity(mut query: Query<(&Puppeteer, &GravityMultiplier, &mut GravityScale)>) {
     for (puppeteer, gravity_multiplier, mut gravity_scale) in &mut query {
-        let new_gravity = Vec2::new(
-            0.0,
-            (-2.0 * puppeteer.jump_height)
-                / (puppeteer.time_to_jump_apex * puppeteer.time_to_jump_apex),
-        );
+        let new_gravity = (-2.0 * puppeteer.jump_height)
+            / (puppeteer.time_to_jump_apex * puppeteer.time_to_jump_apex);
 
-        **gravity_scale = (new_gravity.y / -puppeteer.gravity) * **gravity_multiplier;
+        **gravity_scale = (new_gravity / -puppeteer.gravity) * **gravity_multiplier;
     }
 }
 
