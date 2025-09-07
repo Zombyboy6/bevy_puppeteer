@@ -33,7 +33,7 @@ impl Plugin for PuppeteerPlugin {
             FixedUpdate,
             (
                 puppeteer::movement,
-                //puppeteer::scale_gravity,
+                puppeteer::scale_gravity,
                 puppeteer::update_coyote_time,
                 puppeteer::update_jump_buffer,
                 puppeteer::jumping,
