@@ -1,3 +1,5 @@
+mod map;
+
 use std::any::Any;
 
 use avian3d::{
@@ -20,6 +22,8 @@ use puppeteer::{
     puppeteer::{Puppeteer, PuppeteerInput},
 };
 
+use crate::map::{rotate, spawn_map};
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -33,7 +37,9 @@ fn main() {
             //WorldInspectorPlugin::default(),
         ))
         .add_systems(Startup, setup)
+        .add_systems(Startup, spawn_map)
         .add_systems(Update, (player_look, ui, mouse_lock))
+        .add_systems(Update, rotate)
         .add_systems(FixedUpdate, player_move)
         .run();
 }
@@ -50,21 +56,10 @@ pub struct PlayerHead {
 
 fn setup(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
     mut windows_query: Query<&mut Window, With<PrimaryWindow>>,
 ) -> Result {
     windows_query.single_mut()?.cursor_options.grab_mode = CursorGrabMode::Locked;
     windows_query.single_mut()?.cursor_options.visible = false;
-    commands.spawn((
-        SceneRoot(
-            asset_server.load("test_level.gltf#Scene0"),
-            //transform: Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::PI * 0.5)),
-        ),
-        ColliderConstructorHierarchy::new(Some(
-            avian3d::prelude::ColliderConstructor::TrimeshFromMesh,
-        )),
-        RigidBody::Static,
-    ));
 
     // player
     let _player = commands.spawn((
@@ -96,7 +91,7 @@ fn ui(world: &mut World) {
 
     let mut egui_context = egui_context.clone();
 
-    egui::Window::new("UI").show(egui_context.get_mut(), |ui| {
+    egui::Window::new("Puppeteer").show(egui_context.get_mut(), |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
             let Ok((entity, puppeteer)) = &world.query::<(Entity, &Puppeteer)>().single(world)
             else {

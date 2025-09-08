@@ -30,7 +30,7 @@ impl Plugin for PuppeteerPlugin {
         );
 
         app.add_systems(
-            FixedUpdate,
+            FixedPostUpdate,
             (
                 puppeteer::movement,
                 puppeteer::scale_gravity,
@@ -49,7 +49,7 @@ impl Plugin for PuppeteerPlugin {
 /// 1. `Prepare`: Check if puppets are grounded and prepare/initialize components
 /// 2. `Compute`: Compute movement, used by [`Puppeteer`]. This can be used to implement custom movement logic.
 /// 3. `Move`: Move puppets with respect to collisions and other factors.
-///     Note that the actual transform is updated by the physics engine.
+///    Note that the actual transform is updated by the physics engine.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PuppeteerSet {
     /// Check if puppets are grounded and prepare/initialize components
