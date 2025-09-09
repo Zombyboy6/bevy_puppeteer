@@ -3,10 +3,13 @@ use std::time::Duration;
 use avian3d::prelude::GravityScale;
 use bevy::prelude::*;
 
-use crate::puppet::{Grounded, Puppet};
+use crate::{
+    puppet::{Grounded, Puppet},
+    puppet_rig::LastPosition,
+};
 
 #[derive(Component, Reflect)]
-#[require(Puppet, PuppeteerInput)]
+#[require(Puppet, PuppeteerInput, LastPosition)]
 pub struct Puppeteer {
     pub acceleration: f32,
     pub deceleration: f32,
@@ -129,8 +132,9 @@ pub fn movement(
             controller.air_turn_speed
         };
 
-        let desired_velocity =
-            move_action.move_direction * controller.max_speed * move_action.speed_multiplier;
+        let desired_velocity = move_action.move_direction.normalize_or_zero()
+            * controller.max_speed
+            * move_action.speed_multiplier;
 
         let max_speed_change = if move_action.move_direction.length() > 0.1 {
             if puppet.target_position.length() < 0.1 {

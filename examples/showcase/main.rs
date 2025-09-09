@@ -4,7 +4,7 @@ use std::any::Any;
 
 use avian3d::{
     PhysicsPlugins,
-    prelude::{Collider, ColliderConstructorHierarchy, RigidBody},
+    prelude::{Collider, RigidBody},
 };
 use bevy::{
     input::{ButtonState, keyboard::KeyboardInput, mouse::MouseMotion},
@@ -19,6 +19,7 @@ use bevy_inspector_egui::{
 };
 use puppeteer::{
     PuppeteerPlugin,
+    puppet_rig::{PuppetRig, PuppetRigs},
     puppeteer::{Puppeteer, PuppeteerInput},
 };
 
@@ -47,13 +48,6 @@ fn main() {
 #[derive(Component, Default)]
 pub struct Player;
 
-#[derive(Component, Default)]
-pub struct PlayerHead {
-    pub height_offset: f32,
-    pub yaw: f32,
-    pub pitch: f32,
-}
-
 fn setup(
     mut commands: Commands,
     mut windows_query: Query<&mut Window, With<PrimaryWindow>>,
@@ -68,16 +62,17 @@ fn setup(
         Collider::capsule(0.25, 1.80),
         RigidBody::Kinematic,
         Transform::from_xyz(0.0, 5.5, 0.0),
+        related!(
+            PuppetRigs[(
+                PuppetRig {
+                    offset: Some(Vec3::new(0.0, 0.9, 0.0)),
+                    ..default()
+                },
+                Camera3d::default(),
+            )]
+        ),
     ));
 
-    // Player Head
-    commands.spawn((
-        PlayerHead {
-            height_offset: 0.9,
-            ..default()
-        },
-        Camera3d::default(),
-    ));
     Ok(())
 }
 
@@ -91,13 +86,24 @@ fn ui(world: &mut World) {
 
     let mut egui_context = egui_context.clone();
 
-    egui::Window::new("Puppeteer").show(egui_context.get_mut(), |ui| {
+    egui::Window::new("Settings").show(egui_context.get_mut(), |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
-            let Ok((entity, puppeteer)) = &world.query::<(Entity, &Puppeteer)>().single(world)
+            let Ok((entity, puppeteer, rigs)) = &world
+                .query::<(Entity, &Puppeteer, &PuppetRigs)>()
+                .single(world)
             else {
                 return;
             };
+
             let type_id = puppeteer.to_owned().type_id();
+            let Some(rig_entity) = rigs.collection().first().cloned() else {
+                return;
+            };
+            let Ok(rig) = &world.query::<&PuppetRig>().get(world, rig_entity) else {
+                return;
+            };
+
+            let type_id_rig = rig.to_owned().type_id();
 
             let type_registry = world.resource::<AppTypeRegistry>().0.clone();
             let type_registry = type_registry.read();
@@ -108,13 +114,28 @@ fn ui(world: &mut World) {
                 .get_entity_component_reflect(*entity, type_id, &type_registry)
                 .unwrap();
 
-            unsafe {
+            egui::CollapsingHeader::new("Puppeteer").show(ui, |ui| unsafe {
                 bevy_inspector_egui::bevy_inspector::ui_for_value(
                     &mut *puppeteer,
                     ui,
                     world.world().world_mut(),
                 );
-            }
+            });
+
+            let mut world = RestrictedWorldView::from(world);
+            let (mut component_world, world) = world.split_off_component((rig_entity, type_id_rig));
+
+            let mut rig = component_world
+                .get_entity_component_reflect(rig_entity, type_id_rig, &type_registry)
+                .unwrap();
+
+            egui::CollapsingHeader::new("Puppet rig").show(ui, |ui| unsafe {
+                bevy_inspector_egui::bevy_inspector::ui_for_value(
+                    &mut *rig,
+                    ui,
+                    world.world().world_mut(),
+                );
+            });
         });
     });
 }
@@ -136,8 +157,7 @@ fn mouse_lock(mut query: Query<&mut Window, With<PrimaryWindow>>, keys: Res<Butt
     }
 }
 pub fn player_look(
-    mut player_head_query: Query<(&mut PlayerHead, &mut Transform), Without<Player>>,
-    player_query: Query<&Transform, With<Player>>,
+    mut player_head_query: Query<(&mut PuppetRig, &mut Transform), Without<Player>>,
     mut mouse_motion_event: EventReader<MouseMotion>,
     window: Single<&Window, With<PrimaryWindow>>,
 ) -> Result {
@@ -156,14 +176,12 @@ pub fn player_look(
             let new_rotation_x = Quat::from_axis_angle(Vec3::X, head.pitch);
             head_transform.rotation = new_rotation_y * new_rotation_x;
         }
-        head_transform.translation =
-            player_query.single()?.translation + (Vec3::Y * head.height_offset);
     }
     Ok(())
 }
 
 pub fn player_move(
-    player_head_query: Query<&PlayerHead>,
+    player_head_query: Query<&PuppetRig>,
     mut player_query: Query<(&mut PuppeteerInput, &mut Puppeteer)>,
     mut keyboard_input: Local<ButtonInput<KeyCode>>,
     mut keyboard_input_events: EventReader<KeyboardInput>,

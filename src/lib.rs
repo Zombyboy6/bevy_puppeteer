@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 pub mod puppet;
+pub mod puppet_rig;
 pub mod puppeteer;
 
 use avian3d::prelude::PhysicsSet;
@@ -7,6 +8,8 @@ use bevy::prelude::*;
 
 use puppet::PuppetPlugin;
 use puppeteer::{Jumping, Puppeteer, PuppeteerInput};
+
+use crate::puppet_rig::PuppetRig;
 
 const MAX_BOUNCES: u32 = 5;
 
@@ -16,7 +19,8 @@ impl Plugin for PuppeteerPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app.register_type::<Puppeteer>()
             .register_type::<PuppeteerInput>()
-            .register_type::<Jumping>();
+            .register_type::<Jumping>()
+            .register_type::<PuppetRig>();
         app.add_plugins(PuppetPlugin);
         app.configure_sets(
             FixedPostUpdate,
@@ -40,6 +44,18 @@ impl Plugin for PuppeteerPlugin {
             )
                 .chain()
                 .in_set(PuppeteerSet::Compute),
+        );
+        app.add_systems(
+            FixedPostUpdate,
+            (
+                puppet_rig::sync_rig,
+                puppet_rig::fov,
+                puppet_rig::bobbing,
+                puppet_rig::apply_bobbing_offset,
+                puppet_rig::update_last_position,
+            )
+                .chain()
+                .in_set(PuppeteerSet::Move),
         );
     }
 }
