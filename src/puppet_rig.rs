@@ -43,8 +43,8 @@ impl Default for PuppetRig {
             fov_acceleration_smoothing: 10.0,
             timer: Stopwatch::new(),
             bobbing_offset: Vec3::ZERO,
-            vertical_bobbing_amplitude: 0.1,
-            horizontal_bobbing_amplitude: 0.1,
+            vertical_bobbing_amplitude: 0.05,
+            horizontal_bobbing_amplitude: 0.05,
             bobbing_frequency: 1.0,
         }
     }

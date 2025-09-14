@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use avian3d::prelude::{Collider, RigidBody};
+use avian3d::prelude::{AngularDamping, Collider, Friction, LinearDamping, Mass, RigidBody};
 use bevy::{
     math::primitives::Sphere,
     pbr::{CascadeShadowConfigBuilder, NotShadowCaster},
@@ -47,6 +47,21 @@ pub fn spawn_map(
         Mesh3d(meshes.add(Sphere::new(0.5))),
         MeshMaterial3d(materials.add(asset_server.load("tile.png"))),
         Collider::sphere(0.5),
+        Mass(1.0),
+        Friction::new(0.4),
+        LinearDamping(1.5),
+        AngularDamping(1.5),
+        RigidBody::Dynamic,
+    ));
+    commands.spawn((
+        Transform::from_xyz(0.0, 1.5, -5.0),
+        Mesh3d(meshes.add(Cuboid::new(4.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(asset_server.load("tile.png"))),
+        Collider::cuboid(4.0, 1.0, 1.0),
+        Mass(1.0),
+        Friction::new(0.4),
+        LinearDamping(1.5),
+        AngularDamping(1.5),
         RigidBody::Dynamic,
     ));
 
