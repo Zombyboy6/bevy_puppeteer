@@ -23,7 +23,7 @@ use puppeteer::{
     puppeteer::{Puppeteer, PuppeteerInput},
 };
 
-use crate::map::{rotate, spawn_map};
+use crate::map::{move_platform, rotate, spawn_map};
 
 fn main() {
     App::new()
@@ -38,7 +38,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Startup, spawn_map)
         .add_systems(Update, (player_look, ui, mouse_lock))
-        .add_systems(Update, rotate)
+        .add_systems(Update, (rotate, move_platform))
         .add_systems(FixedUpdate, player_move)
         .run();
 }

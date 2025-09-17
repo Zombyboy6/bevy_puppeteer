@@ -153,8 +153,8 @@ pub fn movement(
             deceleration
         };
 
-        puppet.target_position =
-            move_towards(puppet.target_position, desired_velocity, max_speed_change);
+        puppet.target_velocity =
+            move_towards(puppet.target_velocity, desired_velocity, max_speed_change);
 
         // apply gravity
         if !is_grounded {

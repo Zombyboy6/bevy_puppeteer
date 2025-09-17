@@ -140,26 +140,25 @@ pub(crate) fn update_last_position(mut rig_query: Query<(&mut LastPosition, &Tra
 
 pub(crate) fn sync_rig(
     mut rig_query: Query<(Entity, &mut PuppetRig, &RelatedPuppet)>,
-    mut transform_query: Query<&mut Transform>,
+    mut transform_query: Query<(&mut Transform, &GlobalTransform)>,
     time: Res<Time>,
 ) {
     for (rig_entity, mut rig, related_puppet) in rig_query.iter_mut() {
-        let rig_translation = transform_query.get(rig_entity).unwrap().translation;
+        let rig_translation = transform_query.get(rig_entity).unwrap().0.translation;
         let Some(offset) = rig.offset else {
             rig.offset = Some(rig_translation);
             continue;
         };
 
-        let puppet_transform = transform_query.get(related_puppet.0).unwrap().translation;
+        let puppet_transform = transform_query
+            .get(related_puppet.0)
+            .unwrap()
+            .1
+            .translation();
 
         let smooth_pos = (puppet_transform + offset - rig_translation)
             * (1.0 - (-rig.smoothing * time.delta_secs()).exp());
 
-        let mut rig_transform = transform_query.get_mut(rig_entity).unwrap();
-        rig_transform.translation += smooth_pos;
-
-        let new_rotation_y = Quat::from_axis_angle(Vec3::Y, rig.yaw);
-        let new_rotation_x = Quat::from_axis_angle(Vec3::X, rig.pitch);
-        rig_transform.rotation = new_rotation_y * new_rotation_x;
+        transform_query.get_mut(rig_entity).unwrap().0.translation += smooth_pos;
     }
 }

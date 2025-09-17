@@ -137,6 +137,14 @@ pub fn spawn_map(
         Rotate(0.5),
     ));
 
+    commands.spawn((
+        cube(
+            Transform::from_xyz(-5.0, 2.0, -40.0),
+            Vec3::new(2.0, 1.0, 13.0),
+        ),
+        Move(Vec3::new(0.4, 0.0, 0.0)),
+    ));
+
     let mut cylinder = |transform: Transform,
                         size: Vec3|
      -> (
@@ -158,6 +166,13 @@ pub fn spawn_map(
     commands.spawn(cylinder(
         Transform::from_xyz(-5.0, 0.5, -5.0),
         Vec3::new(2.0, 1.0, 1.0),
+    ));
+    commands.spawn((
+        cylinder(
+            Transform::from_xyz(0.0, 0.0, 10.0),
+            Vec3::new(5.0, 1.0, 5.0),
+        ),
+        Rotate(0.1),
     ));
     commands.spawn((
         cylinder(
@@ -184,5 +199,14 @@ pub fn rotate(mut query: Query<(&mut Transform, &Rotate)>, time: Res<Time>) {
         transform
             .0
             .rotate_local_y(transform.1.0 * time.delta_secs() * PI);
+    }
+}
+
+#[derive(Component)]
+pub struct Move(Vec3);
+
+pub fn move_platform(mut query: Query<(&mut Transform, &Move)>, time: Res<Time>) {
+    for (mut transform, move_component) in query.iter_mut() {
+        transform.translation += move_component.0 * time.delta_secs();
     }
 }

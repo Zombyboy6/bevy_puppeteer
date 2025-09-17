@@ -9,12 +9,14 @@ use crate::{MAX_BOUNCES, PuppeteerSet, puppeteer::GravityMultiplier};
 pub struct PuppetPlugin;
 impl Plugin for PuppetPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Puppet>().register_type::<Grounded>();
+        app.register_type::<Puppet>();
         app.add_systems(
             FixedPostUpdate,
             (
                 check_if_grounded.in_set(PuppeteerSet::Prepare),
-                move_puppet.in_set(PuppeteerSet::Move),
+                (handle_moving_platforms, move_puppet)
+                    .chain()
+                    .in_set(PuppeteerSet::Move),
             ),
         );
     }
@@ -32,7 +34,8 @@ impl Plugin for PuppetPlugin {
     RigidBody::Kinematic,
     Transform,
     GravityScale,
-    GravityMultiplier
+    GravityMultiplier,
+    HandleMovingPlatforms
 )]
 pub struct Puppet {
     /// The amount of extra distance added to collision checks
@@ -50,13 +53,26 @@ pub struct Puppet {
     /// The maximum angle of a slope in degrees that the puppet can walk up / stand on
     pub max_slope_angle: f32,
 
+    /// The relative velocity the puppet tries to move to in the next iteration.
+    /// This does **not** get reset after the puppet has moved.
+    /// Use [`target_velocity`] if you want to apply movement once.
+    ///
+    /// This should be called in [`FixedUpdate`].
+    ///
+    /// Note: [`target_velocity`] and [`target_position`] will be added together.
+    pub target_velocity: Vec3,
+
     /// The relative position the puppet tries to move to in the next iteration.
-    /// This does not get reset.
-    /// Use [Puppet::move_to] to update the target position.
+    /// Reset after the puppet has moved.
+    /// Use [`target_velocity`] to apply movement continuously.
+    ///
+    /// This should be called in [`FixedUpdate`].
+    ///
+    /// Note: [`target_velocity`] and [`target_position`] will be added together.
     pub target_position: Vec3,
 
     /// The current gravity velocity.
-    /// This doesn't get reset and is used internally to calculate the jump falloff.
+    /// This **doesn't** get reset
     pub gravity_velocity: f32,
 }
 
@@ -65,7 +81,7 @@ impl Puppet {
     /// Applies gravity, collision detection and surface sliding.
     /// This method should be called in [`FixedUpdate`].
     pub fn move_to(&mut self, vec: Vec3) {
-        self.target_position = vec;
+        self.target_velocity = vec;
     }
 }
 impl Default for Puppet {
@@ -75,24 +91,31 @@ impl Default for Puppet {
             step_move_distance: 0.2,
             step_height: 0.5,
             max_slope_angle: 55.0,
-            target_position: Vec3::ZERO,
+            target_velocity: Vec3::ZERO,
             gravity_velocity: 0.0,
+            target_position: Vec3::ZERO,
         }
     }
 }
 
-/// Marker component for a puppet that is currently grounded.
-#[derive(Clone, Debug, Default, PartialEq, Copy, Component, Reflect)]
-#[reflect(Debug, Component, Default, PartialEq)]
+/// Marker component for a puppet that is currently grounded and
+/// the entity the puppet is standing on.
+#[derive(Clone, Debug, PartialEq, Copy, Component)]
 #[component(storage = "SparseSet")]
-pub struct Grounded;
+pub struct Grounded(pub Entity);
 
 pub(crate) fn check_if_grounded(
     mut commands: Commands,
-    mut controller_query: Query<(&Puppet, &mut Transform, &Collider, Entity)>,
+    mut controller_query: Query<(
+        &Puppet,
+        &mut Transform,
+        &Collider,
+        Entity,
+        Option<&mut Grounded>,
+    )>,
     spatial_query: SpatialQuery,
 ) {
-    for (controller, mut transform, collider, entity) in controller_query.iter_mut() {
+    for (controller, mut transform, collider, entity, grounded) in controller_query.iter_mut() {
         if let Some(hit) = spatial_query.cast_shape(
             collider,
             transform.translation,
@@ -104,10 +127,63 @@ pub(crate) fn check_if_grounded(
             if hit.distance == 0.0 {
                 transform.translation.y += controller.skin_thickness;
             }
-            commands.entity(entity).insert(Grounded);
+            if let Some(mut grounded) = grounded {
+                if grounded.0 != hit.entity {
+                    grounded.0 = hit.entity;
+                }
+            } else {
+                commands.entity(entity).insert(Grounded(hit.entity));
+            }
         } else {
             commands.entity(entity).remove::<Grounded>();
         }
+    }
+}
+
+/// Add this component to a puppet to handle moving platforms.
+#[derive(Debug, Clone, Copy, PartialEq, Component, Default, Deref)]
+struct HandleMovingPlatforms {
+    pub previous_global_transform: Option<GlobalTransform>,
+}
+
+fn handle_moving_platforms(
+    mut puppet_query: Query<(
+        &mut Puppet,
+        Option<Ref<Grounded>>,
+        &Transform,
+        &mut HandleMovingPlatforms,
+    )>,
+    transform_query: Query<&GlobalTransform, Without<Puppet>>,
+    time: Res<Time>,
+) {
+    for (mut puppet, grounded, transform, mut handle_moving_platforms) in puppet_query.iter_mut() {
+        let Some(grounded) = grounded else {
+            handle_moving_platforms.previous_global_transform = None;
+            continue;
+        };
+
+        let current_global_transform = transform_query.get(grounded.0).unwrap();
+
+        let Some(previous_global_transform) =
+            &mut handle_moving_platforms.previous_global_transform
+        else {
+            handle_moving_platforms.previous_global_transform = Some(*current_global_transform);
+            continue;
+        };
+
+        if grounded.is_changed() && !grounded.is_added() {
+            *previous_global_transform = *current_global_transform;
+            continue;
+        }
+
+        let platform_vel = (current_global_transform.affine()
+            * previous_global_transform.affine().inverse())
+        .transform_point3(transform.translation)
+            - transform.translation;
+
+        *previous_global_transform = *current_global_transform;
+
+        puppet.target_position += platform_vel / time.delta_secs();
     }
 }
 
@@ -120,17 +196,22 @@ pub fn move_puppet(
         Has<Grounded>,
         &Collider,
         &mut Transform,
+        &GlobalTransform,
     )>,
     mut forces: Query<Forces>,
     spatial_query: SpatialQuery,
     center_of_mass_query: Query<(&ColliderMassProperties, &GlobalTransform)>,
 ) {
-    for (entity, puppet, grounded, collider, mut transform) in query.iter_mut() {
+    for (entity, mut puppet, grounded, collider, mut transform, global_transform) in
+        query.iter_mut()
+    {
         let gravity = Vec3::new(0.0, puppet.gravity_velocity, 0.0);
 
         let mut effective_translation = collide_and_slide(
-            transform.translation,
-            puppet.target_position * Vec3::new(1.0, 0.0, 1.0) * time.delta_secs(),
+            global_transform.translation(),
+            (puppet.target_position + puppet.target_velocity)
+                * Vec3::new(1.0, 0.0, 1.0)
+                * time.delta_secs(),
             &spatial_query,
             &SpatialQueryFilter::default().with_excluded_entities([entity]),
             collider,
@@ -142,7 +223,7 @@ pub fn move_puppet(
             &center_of_mass_query,
         );
         effective_translation += collide_and_slide(
-            transform.translation + effective_translation,
+            global_transform.translation() + effective_translation,
             gravity * time.delta_secs(),
             &spatial_query,
             &SpatialQueryFilter::default().with_excluded_entities([entity]),
@@ -156,6 +237,7 @@ pub fn move_puppet(
         );
 
         transform.translation += effective_translation;
+        puppet.target_position = Vec3::ZERO;
     }
 }
 
@@ -180,7 +262,7 @@ fn collide_and_slide(
         return Vec3::ZERO;
     }
 
-    let mut initial_vel = puppet.target_position;
+    let mut initial_vel = puppet.target_velocity;
     if gravity_pass {
         initial_vel = Vec3::new(0.0, puppet.gravity_velocity, 0.0);
     }
