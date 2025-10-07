@@ -157,12 +157,12 @@ fn mouse_lock(mut query: Query<&mut Window, With<PrimaryWindow>>, keys: Res<Butt
     }
 }
 pub fn player_look(
-    mut player_head_query: Query<(&mut PuppetRig, &mut Transform), Without<Player>>,
+    mut player_head_query: Query<&mut PuppetRig, Without<Player>>,
     mut mouse_motion_event: EventReader<MouseMotion>,
     window: Single<&Window, With<PrimaryWindow>>,
 ) -> Result {
     let sensibility = 0.75;
-    for (mut head, mut head_transform) in player_head_query.iter_mut() {
+    for mut head in player_head_query.iter_mut() {
         for mouse in mouse_motion_event.read() {
             if window.cursor_options.grab_mode == CursorGrabMode::None {
                 continue;
@@ -171,10 +171,6 @@ pub fn player_look(
             head.yaw -= (0.1 * mouse.delta.x * sensibility).to_radians();
 
             head.pitch = head.pitch.clamp(-1.54, 1.54);
-
-            let new_rotation_y = Quat::from_axis_angle(Vec3::Y, head.yaw);
-            let new_rotation_x = Quat::from_axis_angle(Vec3::X, head.pitch);
-            head_transform.rotation = new_rotation_y * new_rotation_x;
         }
     }
     Ok(())

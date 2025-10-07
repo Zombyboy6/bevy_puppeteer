@@ -155,6 +155,11 @@ pub(crate) fn sync_rig(
         let smooth_pos = (puppet_transform + offset - rig_translation)
             * (1.0 - (-rig.smoothing * time.delta_secs()).exp());
 
-        transform_query.get_mut(rig_entity).unwrap().translation += smooth_pos;
+        let mut rig_transform = transform_query.get_mut(rig_entity).unwrap();
+        rig_transform.translation += smooth_pos;
+
+        let new_rotation_y = Quat::from_axis_angle(Vec3::Y, rig.yaw);
+        let new_rotation_x = Quat::from_axis_angle(Vec3::X, rig.pitch);
+        rig_transform.rotation = new_rotation_y * new_rotation_x;
     }
 }
