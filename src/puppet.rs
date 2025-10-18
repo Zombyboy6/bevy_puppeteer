@@ -1,6 +1,6 @@
 use avian3d::prelude::{
-    Collider, ColliderMassProperties, ExternalImpulse, GravityScale, RigidBody, ShapeCastConfig,
-    SpatialQuery, SpatialQueryFilter,
+    Collider, ColliderMassProperties, Forces, GravityScale, RigidBody, RigidBodyForces,
+    ShapeCastConfig, SpatialQuery, SpatialQueryFilter,
 };
 use bevy::prelude::*;
 
@@ -113,7 +113,6 @@ pub(crate) fn check_if_grounded(
 
 #[allow(clippy::complexity)]
 pub fn move_puppet(
-    mut commands: Commands,
     time: Res<Time>,
     mut query: Query<(
         Entity,
@@ -122,6 +121,7 @@ pub fn move_puppet(
         &Collider,
         &mut Transform,
     )>,
+    mut forces: Query<Forces>,
     spatial_query: SpatialQuery,
     center_of_mass_query: Query<(&ColliderMassProperties, &GlobalTransform)>,
 ) {
@@ -138,7 +138,7 @@ pub fn move_puppet(
             grounded,
             0,
             false,
-            &mut commands,
+            &mut forces,
             &center_of_mass_query,
         );
         effective_translation += collide_and_slide(
@@ -151,7 +151,7 @@ pub fn move_puppet(
             grounded,
             0,
             true,
-            &mut commands,
+            &mut forces,
             &center_of_mass_query,
         );
 
@@ -170,7 +170,7 @@ fn collide_and_slide(
     grounded: bool,
     depth: u32,
     gravity_pass: bool,
-    commands: &mut Commands,
+    forces: &mut Query<Forces>,
     center_of_mass_query: &Query<(&ColliderMassProperties, &GlobalTransform)>,
 ) -> Vec3 {
     if vel.length() == 0.0 {
@@ -262,15 +262,8 @@ fn collide_and_slide(
                         return Vec3::new(step_vel.x, 0.0, step_vel.z) + (Vec3::Y * step_height);
                     }
                 }
-                if let Ok((center_of_mass, transform)) = center_of_mass_query.get(hit.entity) {
-                    let mut impulse = ExternalImpulse::new(vel);
-                    impulse.apply_impulse_at_point(
-                        vel,
-                        hit.point1,
-                        center_of_mass.center_of_mass + transform.translation(),
-                    );
-                    // impulse.apply_impulse(vel);
-                    commands.entity(hit.entity).insert(impulse);
+                if let Ok(mut forces) = forces.get_mut(hit.entity) {
+                    forces.apply_linear_impulse_at_point(vel, hit.point1);
                 }
 
                 // Treat the collision normal as a flat wall to fix jitter when sliding along steep
@@ -295,7 +288,7 @@ fn collide_and_slide(
                 grounded,
                 depth + 1,
                 gravity_pass,
-                commands,
+                forces,
                 center_of_mass_query,
             )
     } else {

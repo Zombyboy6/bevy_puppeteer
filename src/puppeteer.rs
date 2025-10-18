@@ -55,7 +55,6 @@ impl Default for Puppeteer {
 
 #[derive(Component, Default, Reflect)]
 #[reflect(Component)]
-//#[require(Puppeteer)]
 pub struct PuppeteerInput {
     pub move_direction: Vec3,
     pub speed_multiplier: f32,
@@ -219,7 +218,7 @@ pub fn jumping(
         if input.jump_start {
             commands.entity(entity).insert(Jumping);
 
-            if is_grounded || coyote_time.is_some_and(|t| !t.finished()) {
+            if is_grounded || coyote_time.is_some_and(|t| !t.is_finished()) {
                 commands.entity(entity).insert(JumpBuffer(Timer::new(
                     puppeteer.jump_buffer,
                     TimerMode::Once,
@@ -317,7 +316,7 @@ pub fn update_jump_buffer(
     for (entity, mut input, jump_buffer) in query.iter_mut() {
         if let Some(mut jump_buffer) = jump_buffer {
             jump_buffer.0.tick(time.delta());
-            if jump_buffer.finished() || !input.jump_start {
+            if jump_buffer.is_finished() || !input.jump_start {
                 input.jump_start = false;
                 commands.entity(entity).remove::<JumpBuffer>();
             }

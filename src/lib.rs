@@ -3,7 +3,7 @@ pub mod puppet;
 pub mod puppet_rig;
 pub mod puppeteer;
 
-use avian3d::prelude::PhysicsSet;
+use avian3d::prelude::PhysicsSystems;
 use bevy::prelude::*;
 
 use puppet::PuppetPlugin;
@@ -30,7 +30,7 @@ impl Plugin for PuppeteerPlugin {
                 PuppeteerSet::Move,
             )
                 .chain()
-                .before(PhysicsSet::Prepare),
+                .before(PhysicsSystems::Prepare),
         );
 
         app.add_systems(

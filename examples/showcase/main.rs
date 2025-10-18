@@ -9,7 +9,7 @@ use avian3d::{
 use bevy::{
     input::{ButtonState, keyboard::KeyboardInput, mouse::MouseMotion},
     prelude::*,
-    window::{CursorGrabMode, PrimaryWindow},
+    window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 use bevy_inspector_egui::{
     DefaultInspectorConfigPlugin,
@@ -32,9 +32,7 @@ fn main() {
         .add_plugins((
             PhysicsPlugins::default(), /* PhysicsDebugPlugin::default()*/
             DefaultInspectorConfigPlugin,
-            EguiPlugin {
-                enable_multipass_for_primary_context: false,
-            },
+            EguiPlugin::default(),
             //WorldInspectorPlugin::default(),
         ))
         .add_systems(Startup, setup)
@@ -50,10 +48,10 @@ pub struct Player;
 
 fn setup(
     mut commands: Commands,
-    mut windows_query: Query<&mut Window, With<PrimaryWindow>>,
+    mut windows_query: Query<&mut CursorOptions, With<PrimaryWindow>>,
 ) -> Result {
-    windows_query.single_mut()?.cursor_options.grab_mode = CursorGrabMode::Locked;
-    windows_query.single_mut()?.cursor_options.visible = false;
+    windows_query.single_mut()?.grab_mode = CursorGrabMode::Locked;
+    windows_query.single_mut()?.visible = false;
 
     // player
     let _player = commands.spawn((
@@ -116,7 +114,7 @@ fn ui(world: &mut World) {
 
             egui::CollapsingHeader::new("Puppeteer").show(ui, |ui| unsafe {
                 bevy_inspector_egui::bevy_inspector::ui_for_value(
-                    &mut *puppeteer,
+                    puppeteer.downcast_mut::<Puppeteer>().unwrap(),
                     ui,
                     world.world().world_mut(),
                 );
@@ -131,7 +129,7 @@ fn ui(world: &mut World) {
 
             egui::CollapsingHeader::new("Puppet rig").show(ui, |ui| unsafe {
                 bevy_inspector_egui::bevy_inspector::ui_for_value(
-                    &mut *rig,
+                    rig.downcast_mut::<PuppetRig>().unwrap(),
                     ui,
                     world.world().world_mut(),
                 );
@@ -140,31 +138,34 @@ fn ui(world: &mut World) {
     });
 }
 
-fn mouse_lock(mut query: Query<&mut Window, With<PrimaryWindow>>, keys: Res<ButtonInput<KeyCode>>) {
+fn mouse_lock(
+    mut query: Query<&mut CursorOptions, With<PrimaryWindow>>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
     if !keys.just_pressed(KeyCode::Escape) {
         return;
     }
-    let Ok(mut window) = query.single_mut() else {
+    let Ok(mut cursor_options) = query.single_mut() else {
         return;
     };
 
-    if window.cursor_options.grab_mode != CursorGrabMode::Locked {
-        window.cursor_options.grab_mode = CursorGrabMode::Locked;
-        window.cursor_options.visible = false;
+    if cursor_options.grab_mode != CursorGrabMode::Locked {
+        cursor_options.grab_mode = CursorGrabMode::Locked;
+        cursor_options.visible = false;
     } else {
-        window.cursor_options.grab_mode = CursorGrabMode::None;
-        window.cursor_options.visible = true;
+        cursor_options.grab_mode = CursorGrabMode::None;
+        cursor_options.visible = true;
     }
 }
 pub fn player_look(
     mut player_head_query: Query<&mut PuppetRig, Without<Player>>,
-    mut mouse_motion_event: EventReader<MouseMotion>,
-    window: Single<&Window, With<PrimaryWindow>>,
+    mut mouse_motion_event: MessageReader<MouseMotion>,
+    window: Single<&CursorOptions, With<PrimaryWindow>>,
 ) -> Result {
     let sensibility = 0.75;
     for mut head in player_head_query.iter_mut() {
         for mouse in mouse_motion_event.read() {
-            if window.cursor_options.grab_mode == CursorGrabMode::None {
+            if window.grab_mode == CursorGrabMode::None {
                 continue;
             }
             head.pitch -= (0.1 * mouse.delta.y * sensibility).to_radians();
@@ -180,7 +181,7 @@ pub fn player_move(
     player_head_query: Query<&PuppetRig>,
     mut player_query: Query<(&mut PuppeteerInput, &mut Puppeteer)>,
     mut keyboard_input: Local<ButtonInput<KeyCode>>,
-    mut keyboard_input_events: EventReader<KeyboardInput>,
+    mut keyboard_input_events: MessageReader<KeyboardInput>,
 ) -> Result {
     keyboard_input.clear();
     for event in keyboard_input_events.read() {

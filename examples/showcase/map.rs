@@ -2,8 +2,8 @@ use std::f32::consts::PI;
 
 use avian3d::prelude::{AngularDamping, Collider, Friction, LinearDamping, Mass, RigidBody};
 use bevy::{
+    light::{CascadeShadowConfigBuilder, NotShadowCaster},
     math::primitives::Sphere,
-    pbr::{CascadeShadowConfigBuilder, NotShadowCaster},
     prelude::*,
 };
 
