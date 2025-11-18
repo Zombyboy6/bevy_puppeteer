@@ -8,6 +8,12 @@ use crate::{puppet::Grounded, puppeteer::Puppeteer};
 #[relationship(relationship_target = PuppetRigs)]
 pub struct RelatedPuppet(Entity);
 
+impl RelatedPuppet {
+    pub fn new(entity: Entity) -> Self {
+        Self(entity)
+    }
+}
+
 #[derive(Clone, Component, Debug, PartialEq, Reflect)]
 #[reflect(Debug, Component, Default, PartialEq)]
 #[require(LastPosition)]
